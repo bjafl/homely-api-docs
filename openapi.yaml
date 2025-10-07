@@ -2,23 +2,23 @@ openapi: 3.0.3
 info:
   title: Homely SDK API
   description: |
-    The SDK is designed so that Homely users can develop their own smart-home app solutions. 
-    All you need is to connect your solution to the REST-API, authenticate, and start receiving 
+    The SDK is designed so that Homely users can develop their own smart-home app solutions.
+    All you need is to connect your solution to the REST-API, authenticate, and start receiving
     live events from your sensors through a WebSocket connection.
-    
+
     Available sensor data:
     - HAN-plug (current and total consumption)
     - Alarm state
     - Temperature
     - Door/window status (open/closed)
-    
+
     ## WebSocket Connection
-    
+
     Connect using Socket.IO client to:
     ```
     https://sdk.iotiliti.cloud?locationId={locationId}&token=Bearer%20{access_token}
     ```
-    
+
     **Connection Headers:**
     ```json
     {
@@ -26,7 +26,7 @@ info:
       "locationId": "{locationId}"
     }
     ```
-    
+
     **Event Subscription:**
     ```javascript
     sio.on('event', function(data) {
@@ -34,25 +34,27 @@ info:
       // data.payload or data.data: event data
     });
     ```
-    
+
     **Event Types:**
     - `device-state-changed` - Sensor state updates
     - `alarm-state-changed` - Alarm state changes
-    
-    **Token Refresh:** 
-    WebSocket connection should be updated when access token is refreshed. 
+
+    **Token Refresh:**
+    WebSocket connection should be updated when access token is refreshed.
     Recommended to refresh tokens with 5 minutes (300s) buffer before expiration.
-    
+
     **Implementation Notes:**
     - Use Socket.IO client library (not raw WebSocket)
     - Run WebSocket in separate thread/process for async handling
     - Monitor connection status and implement reconnection logic
     - Handle disconnections gracefully (API may close idle connections)
-    
+
     Note: WebSocket implementation details are based on community reverse engineering.
   version: 1.0.0
   contact:
     name: Homely API Support
+  license:
+    name: MIT
 
 servers:
   - url: https://sdk.iotiliti.cloud/homely
@@ -118,10 +120,11 @@ paths:
         - Authentication
       summary: Refresh Access Token
       description: |
-        Get a new access token using the refresh token. The Access Token has a lifetime 
-        specified in the field "expires_in" (seconds). The refresh token also has an 
+        Get a new access token using the refresh token. The Access Token has a lifetime
+        specified in the field "expires_in" (seconds). The refresh token also has an
         expiration time in the field "refresh_expires_in" (seconds).
       operationId: refreshAccessToken
+      security: []
       requestBody:
         required: true
         content:
@@ -663,16 +666,6 @@ components:
           type: integer
           nullable: true
 
-    WsDeviceChangeEvent:
-      type: object
-      description: WebSocket device state change event
-      properties:
-        type:
-          type: string
-          enum: [device-state-changed]
-        data:
-          $ref: '#/components/schemas/WsDeviceChangeData'
-
     WsAlarmChangeData:
       type: object
       description: WebSocket alarm state change event data
@@ -706,13 +699,3 @@ components:
         eventId:
           type: integer
           description: Unique event identifier
-
-    WsAlarmChangeEvent:
-      type: object
-      description: WebSocket alarm state change event
-      properties:
-        type:
-          type: string
-          enum: [alarm-state-changed]
-        data:
-          $ref: '#/components/schemas/WsAlarmChangeData'

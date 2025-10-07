@@ -23,6 +23,8 @@ The official Homely SDK docs are incomplete (~30% coverage). This project provid
 
 ## Quick Start
 
+Since the API is in beta, you'll need to [contact Homely customer service](https://www.homely.no/kundeservice/?gad_campaignid=21674806763) to get access first!
+
 ### Authentication & Basic Usage
 
 ```bash
@@ -70,6 +72,8 @@ sio.connect(url, headers={'Authorization': f'Bearer {token}', 'locationId': loc_
 
 - **WebSocket**: Use Socket.IO library, not raw WebSocket
 - **Bearer token**: URL-encode space as `%20` between `Bearer` and _token_ in query param
+- The API is read only!
+- Some IOT devices connected to the Homely hub will not appear in the device list provided from the api.
   
 ---
 
