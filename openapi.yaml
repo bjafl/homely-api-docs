@@ -1,0 +1,718 @@
+openapi: 3.0.3
+info:
+  title: Homely SDK API
+  description: |
+    The SDK is designed so that Homely users can develop their own smart-home app solutions. 
+    All you need is to connect your solution to the REST-API, authenticate, and start receiving 
+    live events from your sensors through a WebSocket connection.
+    
+    Available sensor data:
+    - HAN-plug (current and total consumption)
+    - Alarm state
+    - Temperature
+    - Door/window status (open/closed)
+    
+    ## WebSocket Connection
+    
+    Connect using Socket.IO client to:
+    ```
+    https://sdk.iotiliti.cloud?locationId={locationId}&token=Bearer%20{access_token}
+    ```
+    
+    **Connection Headers:**
+    ```json
+    {
+      "Authorization": "Bearer {access_token}",
+      "locationId": "{locationId}"
+    }
+    ```
+    
+    **Event Subscription:**
+    ```javascript
+    sio.on('event', function(data) {
+      // data.type: event type
+      // data.payload or data.data: event data
+    });
+    ```
+    
+    **Event Types:**
+    - `device-state-changed` - Sensor state updates
+    - `alarm-state-changed` - Alarm state changes
+    
+    **Token Refresh:** 
+    WebSocket connection should be updated when access token is refreshed. 
+    Recommended to refresh tokens with 5 minutes (300s) buffer before expiration.
+    
+    **Implementation Notes:**
+    - Use Socket.IO client library (not raw WebSocket)
+    - Run WebSocket in separate thread/process for async handling
+    - Monitor connection status and implement reconnection logic
+    - Handle disconnections gracefully (API may close idle connections)
+    
+    Note: WebSocket implementation details are based on community reverse engineering.
+  version: 1.0.0
+  contact:
+    name: Homely API Support
+
+servers:
+  - url: https://sdk.iotiliti.cloud/homely
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: Authentication endpoints
+  - name: Locations
+    description: Location and gateway management
+  - name: Home
+    description: Device and sensor data
+
+paths:
+  /oauth/token:
+    post:
+      tags:
+        - Authentication
+      summary: Get Access Token
+      description: |
+        Retrieve an Access Token for authentication. This Token is necessary to gain access 
+        to the other API's in Homely SDK. The user is authenticated by using the same 
+        username and password as they use in the Homely app.
+      operationId: getAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessTokenRequest'
+            example:
+              username: "testhomelyapi@safe4.com"
+              password: "ThisIsValidPassword12!"
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+        '400':
+          description: Bad request - missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 400
+                message: ["password must be a string"]
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 401
+                message: "Unauthorized"
+
+  /oauth/refresh-token:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh Access Token
+      description: |
+        Get a new access token using the refresh token. The Access Token has a lifetime 
+        specified in the field "expires_in" (seconds). The refresh token also has an 
+        expiration time in the field "refresh_expires_in" (seconds).
+      operationId: refreshAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Successfully refreshed token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+        '400':
+          description: Bad request - token expired or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 400
+                message: "Refresh token expired"
+
+  /locations:
+    get:
+      tags:
+        - Locations
+      summary: Get Locations
+      description: |
+        Retrieve all Locations (gateways) that the user has access to, as an Owner or Admin.
+      operationId: getLocations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Location'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - user has no access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /home/{locationId}:
+    get:
+      tags:
+        - Home
+      summary: Get Home Data
+      description: |
+        Retrieve the alarm state from a Location (gateway), and detailed information/state 
+        from the available sensors at this Location.
+      operationId: getHomeData
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          description: The unique id for the location
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Home data with devices and sensor states
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeData'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - user has no access to this location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 403
+                message: "User a8dc1a32-9ac4-4ec1-b793-5e7946e389ba has no access to location 182bb447-8fa3-4fab-aa1a-5f01d15d6b51"
+
+  /alarm/state/{locationId}:
+    get:
+      tags:
+        - Home
+      summary: Get Alarm State
+      description: |
+        Retrieve just the alarm state for a specific location. This endpoint was discovered 
+        through community implementations and is not documented in official API docs.
+        
+        **Note**: This endpoint's existence and response format are based on code analysis 
+        and may not be officially supported.
+      operationId: getAlarmState
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          description: The unique id for the location
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Alarm state for the location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlarmStateResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - user has no access to this location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Use the access token obtained from /oauth/token
+
+  schemas:
+    AccessTokenRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: The same e-mail address as used in the Homely app
+          example: "testhomelyapi@safe4.com"
+        password:
+          type: string
+          description: The same password as used in the Homely app
+          example: "ThisIsValidPassword12!"
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: The refresh token from the previous authentication
+
+    AccessTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+          example: 60
+        refresh_expires_in:
+          type: integer
+          description: Refresh token expiration time in seconds
+          example: 1800
+        refresh_token:
+          type: string
+          description: Refresh token for obtaining new access tokens
+        token_type:
+          type: string
+          default: "bearer"
+        scope:
+          type: string
+          default: ""
+        session_state:
+          type: string
+          nullable: true
+        not-before-policy:
+          type: integer
+          nullable: true
+
+    Location:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The manually set name for the location
+          example: "Kringsjå ~ 109FD"
+        role:
+          type: string
+          description: User's role at the location/gateway
+          enum: [ADMIN, OWNER]
+          example: "ADMIN"
+        userId:
+          type: string
+          format: uuid
+          description: Unique id for the user
+        locationId:
+          type: string
+          format: uuid
+          description: Unique id for the location
+        gatewayserial:
+          type: string
+          nullable: true
+          description: Serial number for the gateway
+          example: "02000001000109FD"
+        partnerCode:
+          type: integer
+          nullable: true
+          description: Developer partner ID
+
+    HomeData:
+      type: object
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        gatewayserial:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+          description: Name of the location
+        alarmState:
+          type: string
+          enum:
+            - DISARMED
+            - ARMED_AWAY
+            - ARMED_NIGHT
+            - ARMED_PARTLY
+            - BREACHED
+            - ALARM_PENDING
+            - ALARM_STAY_PENDING
+            - ARMED_NIGHT_PENDING
+            - ARMED_AWAY_PENDING
+        userRoleAtLocation:
+          type: string
+          enum: [ADMIN, OWNER]
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Device'
+
+    AlarmStateResponse:
+      type: object
+      description: Alarm state response (structure based on community implementation, may vary)
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        alarmState:
+          type: string
+          enum:
+            - DISARMED
+            - ARMED_AWAY
+            - ARMED_NIGHT
+            - ARMED_PARTLY
+            - BREACHED
+            - ALARM_PENDING
+            - ALARM_STAY_PENDING
+            - ARMED_NIGHT_PENDING
+            - ARMED_AWAY_PENDING
+
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id for the device
+        name:
+          type: string
+          nullable: true
+          description: The manually set name for the device
+          example: "Motion Sensor Mini"
+        serialNumber:
+          type: string
+          nullable: true
+          description: The serial number for the device
+          example: "0015BC001A016A18"
+        location:
+          type: string
+          nullable: true
+          description: Floor and room name if set for the device
+          example: "Floor 1 - Entrance"
+        online:
+          type: boolean
+          description: Device online status
+        modelId:
+          type: string
+          format: uuid
+          description: Unique id for the model
+        modelName:
+          type: string
+          nullable: true
+          description: Model name
+          example: "Motion Sensor Mini"
+        homeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Home/location reference (discovered in community implementations)
+        features:
+          $ref: '#/components/schemas/DeviceFeatures'
+
+    SensorState:
+      type: object
+      properties:
+        value:
+          oneOf:
+            - type: boolean
+            - type: number
+            - type: string
+          nullable: true
+        lastUpdated:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO 8601 timestamp
+
+    AlarmStates:
+      type: object
+      properties:
+        alarm:
+          $ref: '#/components/schemas/SensorState'
+        tamper:
+          $ref: '#/components/schemas/SensorState'
+        flood:
+          $ref: '#/components/schemas/SensorState'
+        fire:
+          $ref: '#/components/schemas/SensorState'
+        sensitivitylevel:
+          allOf:
+            - $ref: '#/components/schemas/SensorState'
+            - description: Sensitivity level for alarm sensors (discovered in community implementations)
+
+    TemperatureStates:
+      type: object
+      properties:
+        temperature:
+          $ref: '#/components/schemas/SensorState'
+
+    BatteryStates:
+      type: object
+      properties:
+        low:
+          $ref: '#/components/schemas/SensorState'
+        defect:
+          $ref: '#/components/schemas/SensorState'
+        voltage:
+          $ref: '#/components/schemas/SensorState'
+
+    DiagnosticStates:
+      type: object
+      properties:
+        networklinkstrength:
+          $ref: '#/components/schemas/SensorState'
+        networklinkaddress:
+          $ref: '#/components/schemas/SensorState'
+
+    MeteringStates:
+      type: object
+      properties:
+        summationdelivered:
+          allOf:
+            - $ref: '#/components/schemas/SensorState'
+            - description: Total consumption in kWh * 1000 (divide by 1000 for kWh)
+        summationreceived:
+          allOf:
+            - $ref: '#/components/schemas/SensorState'
+            - description: Total power returned to grid
+        demand:
+          allOf:
+            - $ref: '#/components/schemas/SensorState'
+            - description: Current consumption in watts
+        check:
+          $ref: '#/components/schemas/SensorState'
+
+    ThermostatStates:
+      type: object
+      properties:
+        LocalTemperature:
+          allOf:
+            - $ref: '#/components/schemas/SensorState'
+            - description: Local temperature in centigrade * 100 (divide by 100 for °C)
+        AbsMinHeatSetpointLimit:
+          $ref: '#/components/schemas/SensorState'
+        AbsMaxHeatSetpointLimit:
+          $ref: '#/components/schemas/SensorState'
+        OccupiedCoolingSetpoint:
+          $ref: '#/components/schemas/SensorState'
+        OccupiedHeatingSetpoint:
+          $ref: '#/components/schemas/SensorState'
+        ControlSequenceOfOperation:
+          $ref: '#/components/schemas/SensorState'
+        SystemMode:
+          $ref: '#/components/schemas/SensorState'
+
+    AlarmFeature:
+      type: object
+      properties:
+        states:
+          $ref: '#/components/schemas/AlarmStates'
+
+    TemperatureFeature:
+      type: object
+      properties:
+        states:
+          $ref: '#/components/schemas/TemperatureStates'
+
+    BatteryFeature:
+      type: object
+      properties:
+        states:
+          $ref: '#/components/schemas/BatteryStates'
+
+    DiagnosticFeature:
+      type: object
+      properties:
+        states:
+          $ref: '#/components/schemas/DiagnosticStates'
+
+    MeteringFeature:
+      type: object
+      properties:
+        states:
+          $ref: '#/components/schemas/MeteringStates'
+
+    ThermostatFeature:
+      type: object
+      properties:
+        states:
+          $ref: '#/components/schemas/ThermostatStates'
+
+    DeviceFeatures:
+      type: object
+      description: Collection of all possible device features
+      properties:
+        alarm:
+          $ref: '#/components/schemas/AlarmFeature'
+        temperature:
+          $ref: '#/components/schemas/TemperatureFeature'
+        battery:
+          $ref: '#/components/schemas/BatteryFeature'
+        diagnostic:
+          $ref: '#/components/schemas/DiagnosticFeature'
+        metering:
+          $ref: '#/components/schemas/MeteringFeature'
+        thermostat:
+          $ref: '#/components/schemas/ThermostatFeature'
+
+    ErrorResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+          description: HTTP response status code
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: Error message or array of error messages
+
+    # WebSocket Event Schemas (for documentation, not REST endpoints)
+    WsStateChangeData:
+      type: object
+      description: WebSocket state change data for a single sensor
+      properties:
+        feature:
+          type: string
+          enum: [alarm, temperature, battery, diagnostic, metering, thermostat]
+        stateName:
+          type: string
+          description: Name of the state that changed
+        value:
+          oneOf:
+            - type: boolean
+            - type: number
+            - type: string
+          nullable: true
+        lastUpdated:
+          type: string
+          format: date-time
+          nullable: true
+
+    WsDeviceChangeData:
+      type: object
+      description: WebSocket device state change event data
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        rootLocationId:
+          type: string
+          format: uuid
+          nullable: true
+        gatewayId:
+          type: string
+          format: uuid
+          nullable: true
+        modelId:
+          type: string
+          format: uuid
+          nullable: true
+        change:
+          $ref: '#/components/schemas/WsStateChangeData'
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WsStateChangeData'
+        partnerCode:
+          type: integer
+          nullable: true
+
+    WsDeviceChangeEvent:
+      type: object
+      description: WebSocket device state change event
+      properties:
+        type:
+          type: string
+          enum: [device-state-changed]
+        data:
+          $ref: '#/components/schemas/WsDeviceChangeData'
+
+    WsAlarmChangeData:
+      type: object
+      description: WebSocket alarm state change event data
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+            - DISARMED
+            - ARMED_AWAY
+            - ARMED_NIGHT
+            - ARMED_PARTLY
+            - BREACHED
+            - ALARM_PENDING
+            - ALARM_STAY_PENDING
+            - ARMED_NIGHT_PENDING
+            - ARMED_AWAY_PENDING
+        userId:
+          type: string
+          format: uuid
+          description: User who triggered the alarm state change
+        userName:
+          type: string
+          description: Name of user who triggered the alarm state change
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of the change
+        eventId:
+          type: integer
+          description: Unique event identifier
+
+    WsAlarmChangeEvent:
+      type: object
+      description: WebSocket alarm state change event
+      properties:
+        type:
+          type: string
+          enum: [alarm-state-changed]
+        data:
+          $ref: '#/components/schemas/WsAlarmChangeData'

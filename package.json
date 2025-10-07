@@ -1,0 +1,17 @@
+{
+  "name": "homely-api-docs",
+  "version": "0.1.0",
+  "description": "Unofficial docs for Homely AS open API (beta)",
+  "main": "index.js",
+  "scripts": {
+    "validate": "swagger-cli validate openapi.yaml",
+    "serve": "http-server . -p 8080 -o",
+    "build": "npm run validate"
+  },
+  "devDependencies": {
+    "swagger-cli": "^4.0.4",
+    "http-server": "^14.1.1"
+  },
+  "author": "bjafl",
+  "license": "MIT"
+}
