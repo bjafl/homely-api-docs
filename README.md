@@ -26,7 +26,7 @@ The documentation here may be incomplete or contain faults, and community input 
 
 ## Quick Start
 
-Since the API is in beta, you'll need to [contact Homely customer service](https://www.homely.no/kundeservice/?gad_campaignid=21674806763) to get access first.
+Since the API is in beta, you'll need to [contact Homely customer service](https://www.homely.no/kundeservice/) to get access first.
 
 ### Authentication & Basic Usage
 

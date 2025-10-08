@@ -4,7 +4,7 @@ info:
   description: |
     Homely AS provides an open API for customers may develop their own smart-home integrations 
     and solutions. The API is in beta, and users need to request access by 
-    [contacting Homely](https://www.homely.no/kundeservice/?gad_campaignid=21674806763).
+    [contacting Homely](https://www.homely.no/kundeservice/).
 
     The API consists of a REST-API with bearer token header authentication, and option to 
     subscribe to live Socket.IO updates. The WebSocket connection only provides state updates,
