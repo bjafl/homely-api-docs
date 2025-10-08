@@ -462,9 +462,9 @@ components:
         value:
           type: object
           oneOf:
-            - boolean
-            - number
-            - string
+            - type: boolean
+            - type: number
+            - type: string
           nullable: true
         lastUpdated:
           type: string

@@ -4,7 +4,7 @@
   "description": "Unofficial docs for Homely AS open API (beta)",
   "main": "index.js",
   "scripts": {
-    "validate": "swagger-cli validate openapi.yaml",
+    "validate": "swagger-cli validate openapi.yaml && npx redocly lint openapi.yaml ",
     "serve": "http-server . -p 8080 -o",
     "build": "npm run validate"
   },
