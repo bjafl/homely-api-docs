@@ -1,16 +1,20 @@
 openapi: 3.0.3
 info:
-  title: Homely SDK API
+  title: Homely API - unofficial documentation
   description: |
-    The SDK is designed so that Homely users can develop their own smart-home app solutions.
-    All you need is to connect your solution to the REST-API, authenticate, and start receiving
-    live events from your sensors through a WebSocket connection.
+    Homely AS provides an open API for customers may develop their own smart-home integrations 
+    and solutions. The API is in beta, and users need to request access by 
+    [contacting Homely](https://www.homely.no/kundeservice/?gad_campaignid=21674806763).
 
-    Available sensor data:
-    - HAN-plug (current and total consumption)
-    - Alarm state
-    - Temperature
-    - Door/window status (open/closed)
+    The API consists of a REST-API with bearer token header authentication, and option to 
+    subscribe to live Socket.IO updates. The WebSocket connection only provides state updates,
+    so you'll need to fetch initial state (and receive authentication token) from http requests.
+
+    ## Limitations
+
+    The API is read only, and you can't use it to arm / disarm the alarm system or request other
+    actions. There is also varying support for devices, and some devices that works with the 
+    Homely hub will not show up on the device list from the API.
 
     ## WebSocket Connection
 
@@ -39,17 +43,6 @@ info:
     - `device-state-changed` - Sensor state updates
     - `alarm-state-changed` - Alarm state changes
 
-    **Token Refresh:**
-    WebSocket connection should be updated when access token is refreshed.
-    Recommended to refresh tokens with 5 minutes (300s) buffer before expiration.
-
-    **Implementation Notes:**
-    - Use Socket.IO client library (not raw WebSocket)
-    - Run WebSocket in separate thread/process for async handling
-    - Monitor connection status and implement reconnection logic
-    - Handle disconnections gracefully (API may close idle connections)
-
-    Note: WebSocket implementation details are based on community reverse engineering.
   version: 1.0.0
   contact:
     name: Homely API Support

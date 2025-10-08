@@ -6,24 +6,27 @@
 
 > Unofficial OpenAPI specification for the [Homely](https://homely.no/) Smart Home API
 
-[**📖 View Docs**](https://bjafl.github.io/homely-api-docs/) • [**🐛 Issues**](https://github.com/bjafl/homely-api-docs/issues) 
+[**📖 View Docs**](https://bjafl.github.io/homely-api-docs/) • [**🐛 Issues**](https://github.com/bjafl/homely-api-docs/issues)
 
 ---
 
 ## Why This Exists
 
-The official Homely SDK docs are incomplete (~30% coverage). This project provides:
+The official Homely SDK docs are incomplete. This project provides:
+
 - ✅ REST API endpoints
 - ✅ WebSocket/Socket.IO event structures
 - ✅ Data models with known fields
 
-**Sources**: Official PDF from Homely + community projects
+These docs have been compiled from official API documentation in PDF from Homely and community projects. Sources have been analyzed and compiled by Claude AI and refined by repo owner to the information and specifications provided here.
+
+The documentation here may be incomplete or contain faults, and community input will be appreciated. Feel free to send a PR!
 
 ---
 
 ## Quick Start
 
-Since the API is in beta, you'll need to [contact Homely customer service](https://www.homely.no/kundeservice/?gad_campaignid=21674806763) to get access first!
+Since the API is in beta, you'll need to [contact Homely customer service](https://www.homely.no/kundeservice/?gad_campaignid=21674806763) to get access first.
 
 ### Authentication & Basic Usage
 
@@ -100,6 +103,7 @@ sio.connect(url, headers={'Authorization': f'Bearer {token}', 'locationId': loc_
 **Connection**: `https://sdk.iotiliti.cloud?locationId={id}&token=Bearer%20{token}`
 
 **Events**:
+
 - `device-state-changed` - Sensor/device updates
 - `alarm-state-changed` - Alarm system changes
 
@@ -123,6 +127,7 @@ sio.connect(url, headers={'Authorization': f'Bearer {token}', 'locationId': loc_
 Found issues? Discovered new endpoints? PRs welcome!
 
 **Development**:
+
 ```bash
 # Validate spec
 swagger-cli validate openapi.yaml
@@ -146,7 +151,6 @@ redocly preview-docs openapi.yaml
 - [bjafl/homely-ha](https://github.com/bjafl/homely-ha) - owner's custom home assistant integration
 - [yusijs/homely-mqtt](https://github.com/yusijs/homely-mqtt) - typescript mqtt implementation with api docs
 
-
 ---
 
 ## Note
@@ -154,4 +158,3 @@ redocly preview-docs openapi.yaml
 **Unofficial** documentation - not affiliated with Homely AS.
 
 Use at your own risk. No warranties provided. MIT License.
-
