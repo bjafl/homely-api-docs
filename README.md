@@ -31,15 +31,16 @@ Since the API is in beta, you'll need to [contact Homely customer service](https
 # 1. Get access token
 curl -X POST https://sdk.iotiliti.cloud/homely/oauth/token \
   -H "Content-Type: application/json" \
-  -d '{"username": "your-email@example.com", "password": "your-password"}'
+  -d '{"username": "{your_email}", "password": "{your_password}"}'
 
 # 2. List locations
 curl https://sdk.iotiliti.cloud/homely/locations \
-  -H "Authorization: Bearer {access_token}"
+  -H "Authorization: Bearer {token}"
+
 
 # 3. Get devices and states
 curl https://sdk.iotiliti.cloud/homely/home/{locationId} \
-  -H "Authorization: Bearer {access_token}"
+  -H "Authorization: Bearer {token}"
 ```
 
 ### Python Example
@@ -52,10 +53,13 @@ import socketio
 token = requests.post('https://sdk.iotiliti.cloud/homely/oauth/token', 
     json={'username': '...', 'password': '...'}).json()['access_token']
 
+locations = requests.get('https://sdk.iotiliti.cloud/homely/locations',
+    headers={'Authorization': f'Bearer {token}'}).json()
+
 devices = requests.get('https://sdk.iotiliti.cloud/homely/home/{locationId}',
     headers={'Authorization': f'Bearer {token}'}).json()
 
-# WebSocket (Socket.IO - NOT raw WebSocket!)
+# WebSocket (Socket.IO - NOT raw WebSocket)
 sio = socketio.Client()
 
 @sio.on('event')
