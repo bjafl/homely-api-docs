@@ -21,8 +21,30 @@ info:
       documented, subject to change without notice, and usage may violate Homely's terms of service.
       Rate limit behaviour may differ from the public SDK API.
 
-    App API authentication uses Keycloak (JWT) with a separate token refresh endpoint:
-    `POST https://api.homely.no/oauth/v2/refresh-token`
+    App API authentication uses Keycloak (JWT). Credentials discovered via proxy analysis:
+
+    ```
+    POST https://api.homely.no/oauth/v2/token
+    Content-Type: application/json
+
+    {
+      "client_id": "account",
+      "client_secret": "71fb00d6-ad04-43ca-96f4-fb797259da65",
+      "grant_type": "password",
+      "username": "<email>",
+      "password": "<password>"
+    }
+    ```
+
+    Returns `access_token` (JWT, 30 min TTL) and `refresh_token`.
+    Token refresh: `POST https://api.homely.no/oauth/v2/refresh-token`
+
+    **Important**: The App API response schema differs from the Public SDK API.
+    Key differences in `/home/{locationId}`:
+    - `alarmState` (string, top-level) instead of `alarm.state`
+    - `location` contains full room hierarchy (floors → rooms)
+    - `gateway` contains firmware version, Zigbee MAC, battery/power states
+    - `devices[].features` is a dict keyed by feature name
 
     ## Limitations
 
@@ -291,14 +313,79 @@ paths:
   # These are UNOFFICIAL and undocumented by Homely.
   # ============================================================
 
+  /oauth/v2/token:
+    post:
+      tags:
+        - App Authentication
+      summary: Login (App API)
+      description: |
+        Authenticate with username/password and receive a Keycloak JWT access token
+        and refresh token. Credentials discovered via HTTP proxy analysis of the
+        official Homely iOS app (June 2026).
+
+        **Server**: `https://api.homely.no`
+
+        **Known credentials:**
+        - `client_id`: `account`
+        - `client_secret`: `71fb00d6-ad04-43ca-96f4-fb797259da65`
+      operationId: appLogin
+      servers:
+        - url: https://api.homely.no
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id, client_secret, grant_type, username, password]
+              properties:
+                client_id:
+                  type: string
+                  example: account
+                client_secret:
+                  type: string
+                  example: 71fb00d6-ad04-43ca-96f4-fb797259da65
+                grant_type:
+                  type: string
+                  enum: [password]
+                  example: password
+                username:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  example: yourpassword
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: Keycloak JWT (30 min TTL)
+                  refresh_token:
+                    type: string
+                    description: Long-lived refresh token
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    example: 1800
+        '401':
+          description: Invalid credentials
+
   /oauth/v2/refresh-token:
     post:
       tags:
         - App Authentication
       summary: Refresh Access Token (App API)
       description: |
-        Refresh an expired access token using a refresh token. Used by the official
-        Homely app. The token format is Keycloak JWT.
+        Refresh an expired access token using a refresh token.
 
         **Server**: `https://api.homely.no`
       operationId: appRefreshToken
@@ -310,18 +397,35 @@ paths:
           application/json:
             schema:
               type: object
-              required: [refresh_token]
+              required: [client_id, client_secret, grant_type, refresh_token]
               properties:
+                client_id:
+                  type: string
+                  example: account
+                client_secret:
+                  type: string
+                  example: 71fb00d6-ad04-43ca-96f4-fb797259da65
+                grant_type:
+                  type: string
+                  enum: [refresh_token]
                 refresh_token:
                   type: string
-                  description: The refresh token from a previous authentication
       responses:
         '200':
           description: New access token issued
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccessTokenResponse'
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+                  token_type:
+                    type: string
+                  expires_in:
+                    type: integer
         '401':
           description: Refresh token invalid or expired
 
@@ -392,9 +496,10 @@ paths:
         - App Home
       summary: Get Home State (App API)
       description: |
-        Returns full home state for a location, equivalent to the public SDK's
-        `GET /home/{locationId}`. Response is chunked/streamed (large payload).
-        Called on every app foreground resume.
+        Returns full home state for a location. The response schema differs
+        significantly from the Public SDK API — notably `alarmState` is a
+        top-level string field, and the response includes gateway details,
+        room hierarchy, and richer device features.
 
         **Server**: `https://api.homely.no`
       operationId: appGetHome
@@ -415,7 +520,116 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HomeResponse'
+                type: object
+                properties:
+                  location:
+                    type: object
+                    description: Location with full room hierarchy
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      address:
+                        type: object
+                        properties:
+                          street: {type: string}
+                          number: {type: string}
+                          zipCode: {type: string}
+                          city: {type: string}
+                          countryCode: {type: string}
+                          latitude: {type: string}
+                          longitude: {type: string}
+                      children:
+                        type: array
+                        description: Floors, each containing rooms
+                        items:
+                          type: object
+                          properties:
+                            id: {type: string, format: uuid}
+                            name: {type: string}
+                            children:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id: {type: string, format: uuid}
+                                  name: {type: string}
+                  alarmState:
+                    type: string
+                    description: Current alarm state (top-level, NOT nested under .alarm)
+                    enum:
+                      - DISARMED
+                      - ARMED_AWAY
+                      - ARMED_NIGHT
+                      - ARMED_PARTLY
+                      - BREACHED
+                      - ALARM_PENDING
+                  gateway:
+                    type: object
+                    description: Gateway (hub) details and feature states
+                    properties:
+                      id: {type: string, format: uuid}
+                      modelId: {type: string, format: uuid}
+                      locationId: {type: string, format: uuid}
+                      online: {type: boolean}
+                      serialNumber: {type: string}
+                      zigbeeMAC: {type: string}
+                      modelNumber: {type: string}
+                      features:
+                        type: object
+                        description: Gateway feature states (connection, wlan, power, status)
+                        properties:
+                          connection:
+                            type: object
+                            properties:
+                              states:
+                                type: object
+                                properties:
+                                  source:
+                                    type: object
+                                    properties:
+                                      value:
+                                        type: string
+                                        enum: [ethernet, wlan]
+                          power:
+                            type: object
+                            properties:
+                              states:
+                                type: object
+                                properties:
+                                  batteryPercent: {$ref: '#/components/schemas/StateValue'}
+                                  batteryVoltage: {$ref: '#/components/schemas/StateValue'}
+                                  batteryLow: {$ref: '#/components/schemas/StateValue'}
+                                  acPower: {$ref: '#/components/schemas/StateValue'}
+                          status:
+                            type: object
+                            properties:
+                              states:
+                                type: object
+                                properties:
+                                  firmwareVersion: {$ref: '#/components/schemas/StateValue'}
+                                  firmwareUpdate: {$ref: '#/components/schemas/StateValue'}
+                  devices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string, format: uuid}
+                        name: {type: string}
+                        modelName: {type: string}
+                        online: {type: boolean}
+                        features:
+                          type: object
+                          description: >
+                            Dict keyed by feature name (alarm, battery, diagnostic,
+                            temperature, siren, panel, armevent, setup).
+                            Each feature contains a `states` dict with named StateValue entries.
+                  arcServiceStatus:
+                    type: string
+                    description: ARC monitoring subscription status
+                    example: ACTIVE
         '401':
           description: Unauthorized
 
@@ -677,6 +891,17 @@ components:
       description: Use the access token obtained from /oauth/token
 
   schemas:
+    StateValue:
+      type: object
+      description: A feature state value with timestamp
+      properties:
+        value:
+          description: The current value (boolean, number, string, or object)
+        lastUpdated:
+          type: string
+          format: date-time
+          nullable: true
+
     AccessTokenRequest:
       type: object
       required:
