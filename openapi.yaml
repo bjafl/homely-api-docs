@@ -6,14 +6,28 @@ info:
     and solutions. The API is in beta, and users need to request access by 
     [contacting Homely](https://www.homely.no/kundeservice/).
 
-    The API consists of a REST-API with bearer token header authentication, and option to 
+    The API consists of a REST-API with bearer token header authentication, and option to
     subscribe to live Socket.IO updates. The WebSocket connection only provides state updates,
     so you'll need to fetch initial state (and receive authentication token) from http requests.
+
+    ## Two APIs
+
+    Homely exposes two distinct APIs:
+
+    - **Public SDK API** — `https://sdk.iotiliti.cloud/homely` — officially documented, intended
+      for third-party integrations. Access requires contacting Homely customer support.
+    - **App API** — `https://api.homely.no` — the private API used by the official Homely iOS/Android
+      app. Discovered through HTTP proxy analysis of app traffic (June 2026). Not officially
+      documented, subject to change without notice, and usage may violate Homely's terms of service.
+      Rate limit behaviour may differ from the public SDK API.
+
+    App API authentication uses Keycloak (JWT) with a separate token refresh endpoint:
+    `POST https://api.homely.no/oauth/v2/refresh-token`
 
     ## Limitations
 
     The API is read only, and you can't use it to arm / disarm the alarm system or request other
-    actions. There is also varying support for devices, and some devices that works with the 
+    actions. There is also varying support for devices, and some devices that works with the
     Homely hub will not show up on the device list from the API.
 
     ## WebSocket Connection
@@ -55,15 +69,25 @@ security:
 
 servers:
   - url: https://sdk.iotiliti.cloud/homely
-    description: Production server
+    description: Public SDK API (official, requires access request)
+  - url: https://api.homely.no
+    description: App API (private, discovered via proxy analysis — unofficial)
 
 tags:
   - name: Authentication
-    description: Authentication endpoints
+    description: Authentication endpoints (Public SDK API)
   - name: Locations
-    description: Location and gateway management
+    description: Location and gateway management (Public SDK API)
   - name: Home
-    description: Device and sensor data
+    description: Device and sensor data (Public SDK API)
+  - name: App Authentication
+    description: Authentication endpoints (App API — unofficial)
+  - name: App Home
+    description: Home and alarm state endpoints (App API — unofficial)
+  - name: App Gateways
+    description: Gateway management and diagnostics (App API — unofficial)
+  - name: App Devices
+    description: Device history and features (App API — unofficial)
 
 paths:
   /oauth/token:
@@ -261,7 +285,390 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-components: 
+  # ============================================================
+  # App API endpoints (api.homely.no) — discovered via proxy
+  # analysis of official iOS app traffic, June 2026.
+  # These are UNOFFICIAL and undocumented by Homely.
+  # ============================================================
+
+  /oauth/v2/refresh-token:
+    post:
+      tags:
+        - App Authentication
+      summary: Refresh Access Token (App API)
+      description: |
+        Refresh an expired access token using a refresh token. Used by the official
+        Homely app. The token format is Keycloak JWT.
+
+        **Server**: `https://api.homely.no`
+      operationId: appRefreshToken
+      servers:
+        - url: https://api.homely.no
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+                  description: The refresh token from a previous authentication
+      responses:
+        '200':
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+        '401':
+          description: Refresh token invalid or expired
+
+  /users/me:
+    get:
+      tags:
+        - App Authentication
+      summary: Get Current User (App API)
+      description: |
+        Returns the authenticated user's profile. Returns 401 if the access token
+        is expired (app then calls `/oauth/v2/refresh-token`).
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetMe
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+        '401':
+          description: Unauthorized — token expired
+
+  /dashboard:
+    get:
+      tags:
+        - App Home
+      summary: Get Dashboard (App API)
+      description: |
+        Returns dashboard data for the authenticated user. Observed to return a
+        small payload (Content-Length ~2 bytes in captured traffic — possibly an
+        empty array `[]` or `{}`). Exact schema unknown.
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetDashboard
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Dashboard payload (schema not fully documented)
+        '401':
+          description: Unauthorized
+
+  /home/{locationId}:
+    get:
+      tags:
+        - App Home
+      summary: Get Home State (App API)
+      description: |
+        Returns full home state for a location, equivalent to the public SDK's
+        `GET /home/{locationId}`. Response is chunked/streamed (large payload).
+        Called on every app foreground resume.
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetHome
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Full home state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeResponse'
+        '401':
+          description: Unauthorized
+
+  /alarm/state/{locationId}:
+    get:
+      tags:
+        - App Home
+      summary: Get Alarm State (App API)
+      description: |
+        Returns the current alarm state for a location. Also present in the public
+        SDK (undocumented). Payload is small (~61 bytes).
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetAlarmState
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Alarm state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlarmStateResponse'
+        '401':
+          description: Unauthorized
+
+  /arc/membership/{locationId}/status:
+    get:
+      tags:
+        - App Home
+      summary: Get ARC Membership Status (App API)
+      description: |
+        Returns the Alarm Receiving Centre (ARC) subscription/membership status
+        for a location. ARC is Homely's optional professional monitoring service.
+        Response is small (Content-Type `text/html; charset=utf-8`, ~6 bytes —
+        may be a plain status string).
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetArcStatus
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: ARC membership status
+        '401':
+          description: Unauthorized
+
+  /locations/{locationId}/services:
+    get:
+      tags:
+        - App Home
+      summary: Get Location Services (App API)
+      description: |
+        Returns the list of services/subscriptions enabled for a location
+        (e.g. ARC monitoring, camera integration). Payload ~175 bytes.
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetLocationServices
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Services for the location
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      description: Service type identifier
+                    enabled:
+                      type: boolean
+        '401':
+          description: Unauthorized
+
+  /gateways/{gatewayId}/networks:
+    get:
+      tags:
+        - App Gateways
+      summary: Get Gateway Networks (App API)
+      description: |
+        Returns network configuration/status for a gateway (hub). Payload ~168 bytes.
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetGatewayNetworks
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: gatewayId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Gateway network configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Network configuration (schema not fully documented)
+        '401':
+          description: Unauthorized
+
+  /gateways/{gatewayId}/features/wlan/states/configuration:
+    get:
+      tags:
+        - App Gateways
+      summary: Get Gateway WiFi Configuration (App API)
+      description: |
+        Returns the current WiFi/WLAN configuration state of the gateway.
+        Payload ~54 bytes.
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetGatewayWlanConfig
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: gatewayId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: WiFi configuration state
+          content:
+            application/json:
+              schema:
+                type: object
+                description: WLAN configuration (schema not fully documented)
+        '401':
+          description: Unauthorized
+
+  /gateways/{gatewayId}/history-log:
+    get:
+      tags:
+        - App Gateways
+      summary: Get Gateway History Log (App API)
+      description: |
+        Returns the event/history log for a gateway. Response is chunked
+        (large payload). Called on gateway detail view in the app.
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetGatewayHistoryLog
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: gatewayId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Gateway event history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: History log entry (schema not fully documented)
+        '401':
+          description: Unauthorized
+
+  /devices/{deviceId}/features-history:
+    get:
+      tags:
+        - App Devices
+      summary: Get Device Feature History (App API)
+      description: |
+        Returns the historical state values for a device's features (sensors).
+        Supports pagination via `limit` and `offset`.
+
+        **Server**: `https://api.homely.no`
+      operationId: appGetDeviceFeaturesHistory
+      servers:
+        - url: https://api.homely.no
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          example: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          example: 0
+      responses:
+        '200':
+          description: Device feature history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Feature history entry (schema not fully documented)
+        '401':
+          description: Unauthorized
+
+components:
   securitySchemes:
     bearerAuth:
       type: http
